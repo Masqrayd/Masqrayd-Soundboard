@@ -26,6 +26,19 @@ Create a compact, customizable, dockable soundboard that plays audio into OBS an
 4. Test OBS recording/stream capture, monitoring, restarts and installs.
 5. Integrate with existing Broadcast Stack panel attachment mechanism once its interface/source is available.
 
+## Teleprompter non-interference requirements (mandatory)
+
+The existing Broadcast Stack teleprompter launcher is protected functionality. The Soundboard must:
+
+- Never modify, remove, replace, or intercept the teleprompter launch button, configured Python script path, batch/VBS launcher, settings JSON, or startup preferences.
+- Use separate processes and lifecycle controls; Soundboard Stop All, shutdown, restart, and errors must not terminate or restart the teleprompter.
+- Use separate configuration files/namespaces and avoid changing existing Broadcast Stack state.
+- Avoid conflicting global hotkeys, dock IDs, source names, and process names; offer configurable hotkeys with conflict checks.
+- Preserve OBS startup behavior and all existing Stack modules.
+- Pass regression checks before release: teleprompter launch before/after Soundboard load; simultaneous operation; Soundboard close/restart while teleprompter runs; OBS restart with saved launcher settings; hotkey isolation.
+
+Do not claim these checks passed until tested on the actual Windows OBS installation.
+
 ## Status
 
 Project repository initialized. No compiled plugin is available yet.
