@@ -39,6 +39,17 @@ The existing Broadcast Stack teleprompter launcher is protected functionality. T
 
 Do not claim these checks passed until tested on the actual Windows OBS installation.
 
+## Sound button, monitoring, and library requirements (mandatory)
+
+- Each sound button has an independent user-selected color, persistent across restarts, regardless of bank/category.
+- On press, immediately show visible feedback; while playing, brighten/highlight the button and display an active indicator. Return to idle on completion. Looping sounds remain active until stopped. Very short sounds must show a minimum perceptible confirmation interval.
+- Support distinct audience/OBS output and headphone monitoring controls, independent monitor volume/mute, master volume, and per-sound gain. Avoid doubled audio/feedback; validate routing in actual OBS recordings.
+- Offer a dedicated, user-configurable sound-library directory, defaulting to a `Masqrayd Soundboard` folder under the user's Music directory (not the OBS program directory).
+- Support organized subfolders/banks (Reactions, Comedy, News, Crime, Intros, Custom), file import, custom button labels independent of filenames, and persistent mappings from button to audio file.
+- Persist sound metadata (label, file path or relative library reference, color, gain, loop, hotkey, bank) in a library manifest, with portable relative paths for managed files where possible.
+- Provide missing-file warnings and a `Relink Sounds from Folder` recovery workflow, with confirmation for ambiguous filename matches.
+- Keep library configuration separate from the teleprompter launcher and all other Broadcast Stack modules.
+
 ## Status
 
 Project repository initialized. No compiled plugin is available yet.
