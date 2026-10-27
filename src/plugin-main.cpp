@@ -25,6 +25,12 @@
 #include <QMessageBox>
 #include <QSlider>
 #include <QTimer>
+#include <QUrl>
+#include <QColor>
+#include <QHash>
+#include <QLineEdit>
+#include <QSaveFile>
+#include <QFileDialog>
 #include <QUuid>
 #include <QPointer>
 #include <vector>
@@ -103,7 +109,7 @@ public:
   }
   void save() {
     QJsonObject root; root.insert("schema",1);root.insert("masterVolume",masterLevel);root.insert("sounds",sounds);
-    QFile f(manifest); if(f.open(QIODevice::WriteOnly)) f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    QSaveFile f(manifest); if(f.open(QIODevice::WriteOnly)) { f.write(QJsonDocument(root).toJson(QJsonDocument::Indented)); f.commit(); }
   }
   void updateLights() {
     for(auto it=buttons.begin();it!=buttons.end();++it) {
@@ -115,7 +121,7 @@ public:
     }
   }
   void refresh() {
-    tabs->clear(); buttons.clear();
+    while(tabs->count()) { QWidget *w=tabs->widget(0); tabs->removeTab(0); delete w; } buttons.clear();
     auto *page=new QWidget();
     auto *grid=new QGridLayout(page);
     int idx=0;
@@ -165,6 +171,7 @@ public:
     auto *rename=menu.addAction("Rename");
     auto *color=menu.addAction("Button color");
     auto *archive=menu.addAction("Archive");
+    auto *activate=menu.addAction("Activate");
     auto *retire=menu.addAction("Retire");
     auto *selected=menu.exec(pos);
     if(!selected)return;
@@ -177,6 +184,7 @@ public:
         QColor c=QColorDialog::getColor(QColor(s.value("color").toString()),this,"Sound button color");
         if(c.isValid())s.insert("color",c.name());
       } else if(selected==archive) s.insert("status","archived");
+      else if(selected==activate) s.insert("status","active");
       else if(selected==retire) s.insert("status","retired");
       sounds.replace(i,s);break;
     }
