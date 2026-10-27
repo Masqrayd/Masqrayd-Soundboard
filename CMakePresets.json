@@ -1,0 +1,18 @@
+{
+  "version": 8,
+  "configurePresets": [
+    {
+      "name": "windows-x64",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build_x64",
+      "cacheVariables": {
+        "ENABLE_FRONTEND_API": true,
+        "ENABLE_QT": true
+      }
+    }
+  ],
+  "buildPresets": [
+    {"name":"windows-x64","configurePreset":"windows-x64","configuration":"RelWithDebInfo"}
+  ]
+}
