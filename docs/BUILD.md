@@ -2,9 +2,16 @@
 
 This is an initial source prototype, **not a compiled or OBS-tested release**.
 
-Requires Windows x64, a matching OBS Studio SDK, Qt 6 Core/Widgets/Multimedia, CMake 3.28+, and a compatible C++17 compiler.
+Target OBS Studio **33.0.0 (64-bit)** on Windows x64, as confirmed by the user's About screenshot. Requires a matching OBS Studio 33.0.0 SDK, Qt 6 Core/Widgets/Multimedia, CMake 3.28+, and a compatible C++17 compiler.
 
 Configure using the OBS plugin template/toolchain appropriate to your installed OBS version. The CMake project expects `libobs`, `obs-frontend-api`, and `Qt6` package discovery. No packaged dependencies or installer are provided yet.
+
+## Compatibility gate
+
+- Build against OBS Studio 33.0.0 and matching Qt 6 components; do not reuse a prebuilt OBS 32.2.2 plugin binary.
+- Verify that the compiled DLL loads in OBS 33.0.0 before packaging an installer.
+- Do not overwrite, uninstall, or modify existing Broadcast Stack 1.4.0 components or teleprompter launcher configuration.
+- Test OBS 33.0.0 startup, dock visibility, recording audio routing, headphone monitoring, and teleprompter launch independently before labeling a release compatible.
 
 ## Important limitations
 
