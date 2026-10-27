@@ -1,0 +1,29 @@
+name: Windows OBS 33 build (experimental)
+on:
+  push:
+    branches: [StartHere, feature/windows-build-obs33]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2025-vs2026
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Windows x64
+        run: cmake --preset windows-x64 -DBUILD_TESTING=OFF
+      - name: Compile soundboard
+        run: cmake --build --preset windows-x64 --parallel
+      - name: Stage compiled plugin
+        shell: pwsh
+        run: |
+          cmake --install build_x64 --config RelWithDebInfo --prefix dist
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem -Recurse dist
+          if (!(Test-Path dist/masqrayd-soundboard/bin/64bit/masqrayd-soundboard.dll)) { throw 'Expected plugin DLL missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Masqrayd-Soundboard-OBS33-Windows-x64-EXPERIMENTAL
+          path: dist/
+          if-no-files-found: error
