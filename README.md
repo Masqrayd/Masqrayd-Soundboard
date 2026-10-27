@@ -50,6 +50,16 @@ Do not claim these checks passed until tested on the actual Windows OBS installa
 - Provide missing-file warnings and a `Relink Sounds from Folder` recovery workflow, with confirmation for ambiguous filename matches.
 - Keep library configuration separate from the teleprompter launcher and all other Broadcast Stack modules.
 
+## Library lifecycle and active-board curation (mandatory)
+
+- No arbitrary small cap on the total number of imported sounds; keep the interface responsive by loading audio on demand and only rendering active sounds in the dock.
+- Maintain separate Active, Archived, and Retired states. Active sounds appear on the playable dock; archived and retired sounds remain in the library with their files and all metadata intact.
+- Allow reactivation without reimporting or losing custom labels, colors, gains, loops, hotkeys, and file mappings.
+- Provide a compact searchable Manage Library view with sorting, multi-select, and bulk Activate / Archive / Retire actions.
+- Allow drag-to-reorder active sound buttons and persist the arrangement.
+- Permanent deletion must be a separate explicit action with confirmation; archiving or retiring must never delete audio files.
+- Store lifecycle state and ordering in the sound-library manifest. Avoid eager loading every archived audio file into memory.
+
 ## Status
 
 Project repository initialized. No compiled plugin is available yet.
