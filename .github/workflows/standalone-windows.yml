@@ -36,5 +36,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Masqrayd-Soundboard-Standalone-Windows-x64-ONEDIR
-          path: Masqrayd-Soundboard-Standalone-Windows-x64.zip
+          path: Masqrayd-Soundboard-Standalone-Windows-x64-ONEDIR.zip
           if-no-files-found: error
