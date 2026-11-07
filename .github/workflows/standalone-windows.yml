@@ -24,17 +24,17 @@ jobs:
       - name: Verify source syntax
         run: python -m py_compile standalone/soundboard.py
       - name: Build standalone EXE
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name Masqrayd-Soundboard standalone/soundboard.py
+        run: python -m PyInstaller --noconfirm --clean --onedir --windowed --name Masqrayd-Soundboard standalone/soundboard.py
       - name: Verify EXE exists
         shell: pwsh
         run: |
-          if (!(Test-Path dist/Masqrayd-Soundboard.exe)) { throw "Executable not found" }
-          Get-FileHash dist/Masqrayd-Soundboard.exe -Algorithm SHA256
+          if (!(Test-Path dist/Masqrayd-Soundboard/Masqrayd-Soundboard.exe)) { throw "Executable not found" }
+          Get-FileHash dist/Masqrayd-Soundboard/Masqrayd-Soundboard.exe -Algorithm SHA256
       - name: Package downloadable ZIP
         shell: pwsh
-        run: Compress-Archive -Path dist/Masqrayd-Soundboard.exe -DestinationPath Masqrayd-Soundboard-Standalone-Windows-x64.zip -Force
+        run: Compress-Archive -Path dist/Masqrayd-Soundboard -DestinationPath Masqrayd-Soundboard-Standalone-Windows-x64-ONEDIR.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: Masqrayd-Soundboard-Standalone-Windows-x64
+          name: Masqrayd-Soundboard-Standalone-Windows-x64-ONEDIR
           path: Masqrayd-Soundboard-Standalone-Windows-x64.zip
           if-no-files-found: error
