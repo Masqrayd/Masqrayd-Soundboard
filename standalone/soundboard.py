@@ -33,12 +33,14 @@ class Soundboard(tk.Tk):
         self.playing = {}
         self.dragging = None
         self.pad_buttons = {}
+        self.drag_start = None
         self.volume = tk.DoubleVar(value=0.8)
         self.search = tk.StringVar()
         self.show_archived = tk.BooleanVar(value=False)
         self.bank = tk.StringVar(value='All')
         self.edit_mode = tk.BooleanVar(value=False)
         self.make_ui()
+        self.bind_all("<ButtonRelease-1>", self.finish_drag, add="+")
         self.refresh()
         self.after(200, self.poll_playback)
         self.protocol("WM_DELETE_WINDOW", self.close)
@@ -145,39 +147,55 @@ class Soundboard(tk.Tk):
             if self.edit_mode.get():
                 pad.configure(cursor="fleur", relief="raised")
                 pad.bind("<ButtonPress-1>", lambda e, x=item: self.start_drag(e, x))
-                pad.bind("<ButtonRelease-1>", lambda e, x=item: self.finish_drag(e, x))
+                pad.bind("<B1-Motion>", self.drag_motion)
             tk.Button(tile, text="⚙ Edit" if not self.edit_mode.get() else "⚙ Color / Group",
                       command=lambda x=item: self.edit(x)).pack(fill="x", pady=(5, 0))
         for col in range(count):
             self.grid_frame.grid_columnconfigure(col, weight=1)
 
     def start_drag(self, event, item):
+        if not self.edit_mode.get():
+            return
         self.dragging = item["id"]
+        self.drag_start = (event.x_root, event.y_root)
+        self.status.configure(text="Arrange: drag onto another pad, then release to move it")
 
-    def finish_drag(self, event, item):
+    def drag_motion(self, event):
         if not self.dragging:
             return
-        # Identify the pad under the pointer, including when crossing tile boundaries.
-        target_widget = self.winfo_containing(event.x_root, event.y_root)
-        target_id = None
-        while target_widget is not None:
-            for key, button in self.pad_buttons.items():
-                if target_widget == button:
-                    target_id = key
-                    break
-            if target_id or target_widget == self:
-                break
-            target_widget = target_widget.master
+        x, y = event.x_root, event.y_root
+        for key, button in self.pad_buttons.items():
+            button.configure(relief="sunken" if key != self.dragging and
+                             button.winfo_rootx() <= x < button.winfo_rootx() + button.winfo_width() and
+                             button.winfo_rooty() <= y < button.winfo_rooty() + button.winfo_height()
+                             else "raised")
+
+    def finish_drag(self, event):
+        # Use a window-wide release binding: Tk sends release to the starting
+        # button even when the pointer is over another pad.
+        if not self.dragging:
+            return
         source_id = self.dragging
         self.dragging = None
-        if target_id and source_id != target_id:
-            source = next((x for x in self.items if x["id"] == source_id), None)
-            target = next((x for x in self.items if x["id"] == target_id), None)
+        if not self.edit_mode.get():
+            return
+        x, y = event.x_root, event.y_root
+        if self.drag_start and abs(x - self.drag_start[0]) + abs(y - self.drag_start[1]) < 8:
+            self.drag_start = None
+            return
+        self.drag_start = None
+        target_id = next((key for key, button in self.pad_buttons.items()
+                          if button.winfo_rootx() <= x < button.winfo_rootx() + button.winfo_width()
+                          and button.winfo_rooty() <= y < button.winfo_rooty() + button.winfo_height()), None)
+        if target_id and target_id != source_id:
+            source = next((item for item in self.items if item["id"] == source_id), None)
+            target = next((item for item in self.items if item["id"] == target_id), None)
             if source and target:
                 self.items.remove(source)
                 self.items.insert(self.items.index(target), source)
                 self.save()
-                self.refresh()
+                self.status.configure(text="Pad moved and order saved")
+        self.refresh()
 
     def play(self, item):
         path = Path(item["path"])
