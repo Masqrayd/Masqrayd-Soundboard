@@ -9,7 +9,7 @@ import shutil
 import tkinter as tk
 import uuid
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import colorchooser, filedialog, messagebox, simpledialog, ttk
 
 import pygame
 
@@ -31,9 +31,13 @@ class Soundboard(tk.Tk):
         pygame.mixer.set_num_channels(32)
         self.items = self.load_library()
         self.playing = {}
+        self.dragging = None
+        self.pad_buttons = {}
         self.volume = tk.DoubleVar(value=0.8)
         self.search = tk.StringVar()
         self.show_archived = tk.BooleanVar(value=False)
+        self.bank = tk.StringVar(value='All')
+        self.edit_mode = tk.BooleanVar(value=False)
         self.make_ui()
         self.refresh()
         self.after(200, self.poll_playback)
@@ -70,6 +74,11 @@ class Soundboard(tk.Tk):
                        command=self.refresh, bg="#202127", fg="white",
                        selectcolor="#3b3b44").pack(side="left")
         tk.Button(bar, text="Stop all", command=self.stop_all).pack(side="right")
+        tk.Checkbutton(bar, text="Arrange pads", variable=self.edit_mode, command=self.refresh,
+                       bg="#202127", fg="white", selectcolor="#3b3b44").pack(side="left")
+        self.bank_menu = ttk.Combobox(bar, textvariable=self.bank, width=14, state="readonly")
+        self.bank_menu.pack(side="left", padx=5)
+        self.bank_menu.bind("<<ComboboxSelected>>", lambda e: self.refresh())
         tk.Scale(bar, from_=0, to=1, resolution=0.05, orient="horizontal",
                  variable=self.volume, label="Master volume", bg="#202127", fg="white",
                  highlightthickness=0, length=180, command=lambda _: self.update_volume()).pack(side="right")
@@ -100,7 +109,7 @@ class Soundboard(tk.Tk):
                 shutil.copy2(src, dest)
                 self.items.append({"id": uuid.uuid4().hex, "label": src.stem,
                                    "path": str(dest), "color": COLORS[len(self.items) % len(COLORS)],
-                                   "archived": False})
+                                   "archived": False, "bank": "General"})
             except OSError as exc:
                 messagebox.showerror("Import failed", str(exc))
         self.save()
@@ -111,22 +120,64 @@ class Soundboard(tk.Tk):
             return
         for child in self.grid_frame.winfo_children():
             child.destroy()
+        self.pad_buttons = {}
+        banks = ["All"] + sorted({x.get("bank", "General") for x in self.items})
+        self.bank_menu["values"] = banks
+        if self.bank.get() not in banks:
+            self.bank.set("All")
         count = max(2, self.canvas.winfo_width() // 180)
         query = self.search.get().casefold()
-        visible = [x for x in self.items if (self.show_archived.get() or not x.get("archived"))
+        visible = [x for x in self.items
+                   if (self.show_archived.get() or not x.get("archived"))
+                   and (self.bank.get() == "All" or x.get("bank", "General") == self.bank.get())
                    and query in x.get("label", "").casefold()]
         for index, item in enumerate(visible):
-            tile = tk.Frame(self.grid_frame, bg="#303039", padx=7, pady=7)
+            tile = tk.Frame(self.grid_frame, bg="#303039", padx=5, pady=5)
             tile.grid(row=index // count, column=index % count, padx=5, pady=5, sticky="nsew")
             playing = item["id"] in self.playing and self.playing[item["id"]].get_busy()
-            label = ("▶ " if playing else "") + item["label"][:30]
-            tk.Button(tile, text=label, wraplength=135, height=3, width=17,
-                      bg="#e3a0b4" if playing else item.get("color", COLORS[0]),
-                      fg="white", activebackground="#f1a9bf",
-                      command=lambda x=item: self.play(x)).pack(fill="x")
-            tk.Button(tile, text="Edit / Archive", command=lambda x=item: self.edit(x)).pack(fill="x", pady=(5, 0))
+            label = item["label"][:30]
+            pad = tk.Button(tile, text=label, wraplength=135, height=3, width=17,
+                            bg="#d72e45" if playing else item.get("color", COLORS[0]),
+                            fg="white", activebackground="#ed5267",
+                            command=lambda x=item: self.play(x) if not self.edit_mode.get() else None)
+            pad.pack(fill="x")
+            self.pad_buttons[item["id"]] = pad
+            if self.edit_mode.get():
+                pad.configure(cursor="fleur", relief="raised")
+                pad.bind("<ButtonPress-1>", lambda e, x=item: self.start_drag(e, x))
+                pad.bind("<ButtonRelease-1>", lambda e, x=item: self.finish_drag(e, x))
+            tk.Button(tile, text="⚙ Edit" if not self.edit_mode.get() else "⚙ Color / Group",
+                      command=lambda x=item: self.edit(x)).pack(fill="x", pady=(5, 0))
         for col in range(count):
             self.grid_frame.grid_columnconfigure(col, weight=1)
+
+    def start_drag(self, event, item):
+        self.dragging = item["id"]
+
+    def finish_drag(self, event, item):
+        if not self.dragging:
+            return
+        # Identify the pad under the pointer, including when crossing tile boundaries.
+        target_widget = self.winfo_containing(event.x_root, event.y_root)
+        target_id = None
+        while target_widget is not None:
+            for key, button in self.pad_buttons.items():
+                if target_widget == button:
+                    target_id = key
+                    break
+            if target_id or target_widget == self:
+                break
+            target_widget = target_widget.master
+        source_id = self.dragging
+        self.dragging = None
+        if target_id and source_id != target_id:
+            source = next((x for x in self.items if x["id"] == source_id), None)
+            target = next((x for x in self.items if x["id"] == target_id), None)
+            if source and target:
+                self.items.remove(source)
+                self.items.insert(self.items.index(target), source)
+                self.save()
+                self.refresh()
 
     def play(self, item):
         path = Path(item["path"])
@@ -147,12 +198,20 @@ class Soundboard(tk.Tk):
             messagebox.showerror("Playback failed", str(exc))
 
     def edit(self, item):
-        choice = simpledialog.askstring("Edit sound", "Enter a new label (Cancel to keep):",
+        choice = simpledialog.askstring("Pad label", "Sound label:",
                                         initialvalue=item["label"], parent=self)
         if choice is not None and choice.strip():
             item["label"] = choice.strip()
+        selected = colorchooser.askcolor(color=item.get("color", COLORS[0]), parent=self,
+                                         title="Choose pad color")[1]
+        if selected:
+            item["color"] = selected
+        group = simpledialog.askstring("Sound group", "Group / bank name:",
+                                       initialvalue=item.get("bank", "General"), parent=self)
+        if group is not None and group.strip():
+            item["bank"] = group.strip()
         action = messagebox.askyesnocancel("Sound management",
-                                         "Archive this sound?\nYes: archive/unarchive\nNo: locate a replacement audio file\nCancel: finish")
+                                          "Archive/unarchive this pad?\\nYes: toggle archive\\nNo: locate replacement audio\\nCancel: finish")
         if action is True:
             item["archived"] = not item.get("archived", False)
         elif action is False:
