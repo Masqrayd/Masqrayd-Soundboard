@@ -2,7 +2,7 @@
 
 Run: py -m pip install -r standalone/requirements.txt
      py standalone/soundboard.py
-OBS: Capture the application's audio using Application Audio Capture (BETA).
+Sound plays through the Windows default audio device.
 """
 import json
 import shutil
@@ -34,6 +34,7 @@ class Soundboard(tk.Tk):
         self.dragging = None
         self.pad_buttons = {}
         self.drag_start = None
+        self.selected_pad = None
         self.volume = tk.DoubleVar(value=0.8)
         self.search = tk.StringVar()
         self.show_archived = tk.BooleanVar(value=False)
@@ -93,7 +94,7 @@ class Soundboard(tk.Tk):
         self.window_id = self.canvas.create_window((0, 0), window=self.grid_frame, anchor="nw")
         self.grid_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind("<Configure>", self.resize_grid)
-        self.status = tk.Label(self, text="Ready • OBS: use Application Audio Capture for this app",
+        self.status = tk.Label(self, text="Ready • Playing through Windows default audio output",
                                bg="#202127", fg="#b7b5bd", anchor="w")
         self.status.pack(fill="x", padx=14, pady=8)
 
@@ -137,21 +138,45 @@ class Soundboard(tk.Tk):
             tile = tk.Frame(self.grid_frame, bg="#303039", padx=5, pady=5)
             tile.grid(row=index // count, column=index % count, padx=5, pady=5, sticky="nsew")
             playing = item["id"] in self.playing and self.playing[item["id"]].get_busy()
-            label = item["label"][:30]
+            label = ("● " if self.selected_pad == item["id"] and self.edit_mode.get() else "") + item["label"][:30]
             pad = tk.Button(tile, text=label, wraplength=135, height=3, width=17,
                             bg="#d72e45" if playing else item.get("color", COLORS[0]),
                             fg="white", activebackground="#ed5267",
-                            command=lambda x=item: self.play(x) if not self.edit_mode.get() else None)
+                            command=lambda x=item: self.arrange_click(x) if self.edit_mode.get() else self.play(x))
             pad.pack(fill="x")
             self.pad_buttons[item["id"]] = pad
             if self.edit_mode.get():
                 pad.configure(cursor="fleur", relief="raised")
                 pad.bind("<ButtonPress-1>", lambda e, x=item: self.start_drag(e, x))
                 pad.bind("<B1-Motion>", self.drag_motion)
+                pad.bind("<ButtonRelease-1>", self.finish_drag, add="+")
             tk.Button(tile, text="⚙ Edit" if not self.edit_mode.get() else "⚙ Color / Group",
                       command=lambda x=item: self.edit(x)).pack(fill="x", pady=(5, 0))
         for col in range(count):
             self.grid_frame.grid_columnconfigure(col, weight=1)
+
+    def arrange_click(self, item):
+        if not self.edit_mode.get():
+            return
+        if self.selected_pad is None:
+            self.selected_pad = item["id"]
+            self.status.configure(text="Selected " + item["label"] + " — click destination")
+            self.refresh()
+            return
+        source_id = self.selected_pad
+        self.selected_pad = None
+        self.move_pad(source_id, item["id"])
+
+    def move_pad(self, source_id, target_id):
+        if source_id != target_id:
+            source = next((x for x in self.items if x["id"] == source_id), None)
+            target = next((x for x in self.items if x["id"] == target_id), None)
+            if source and target:
+                self.items.remove(source)
+                self.items.insert(self.items.index(target), source)
+                self.save()
+                self.status.configure(text="Pad order saved")
+        self.refresh()
 
     def start_drag(self, event, item):
         if not self.edit_mode.get():
@@ -171,31 +196,27 @@ class Soundboard(tk.Tk):
                              else "raised")
 
     def finish_drag(self, event):
-        # Use a window-wide release binding: Tk sends release to the starting
-        # button even when the pointer is over another pad.
         if not self.dragging:
             return
         source_id = self.dragging
         self.dragging = None
         if not self.edit_mode.get():
             return
-        x, y = event.x_root, event.y_root
-        if self.drag_start and abs(x - self.drag_start[0]) + abs(y - self.drag_start[1]) < 8:
-            self.drag_start = None
-            return
+        x, y = self.winfo_pointerxy()
+        moved = self.drag_start and (
+            abs(x - self.drag_start[0]) + abs(y - self.drag_start[1]) >= 8)
         self.drag_start = None
+        if not moved:
+            return
         target_id = next((key for key, button in self.pad_buttons.items()
                           if button.winfo_rootx() <= x < button.winfo_rootx() + button.winfo_width()
                           and button.winfo_rooty() <= y < button.winfo_rooty() + button.winfo_height()), None)
         if target_id and target_id != source_id:
-            source = next((item for item in self.items if item["id"] == source_id), None)
-            target = next((item for item in self.items if item["id"] == target_id), None)
-            if source and target:
-                self.items.remove(source)
-                self.items.insert(self.items.index(target), source)
-                self.save()
-                self.status.configure(text="Pad moved and order saved")
-        self.refresh()
+            self.selected_pad = None
+            self.move_pad(source_id, target_id)
+        else:
+            self.status.configure(text="Drop on a pad, or click source then destination")
+            self.refresh()
 
     def play(self, item):
         path = Path(item["path"])
