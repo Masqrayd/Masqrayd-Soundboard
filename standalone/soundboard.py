@@ -35,13 +35,14 @@ class Soundboard(tk.Tk):
         self.pad_buttons = {}
         self.drag_start = None
         self.selected_pad = None
+        self.shape = tk.StringVar(value="Square")
         self.volume = tk.DoubleVar(value=0.8)
         self.search = tk.StringVar()
         self.show_archived = tk.BooleanVar(value=False)
         self.bank = tk.StringVar(value='All')
         self.edit_mode = tk.BooleanVar(value=False)
         self.make_ui()
-        self.bind_all("<ButtonRelease-1>", self.finish_drag, add="+")
+        
         self.refresh()
         self.after(200, self.poll_playback)
         self.protocol("WM_DELETE_WINDOW", self.close)
@@ -97,6 +98,9 @@ class Soundboard(tk.Tk):
         self.status = tk.Label(self, text="Ready • Playing through Windows default audio output",
                                bg="#202127", fg="#b7b5bd", anchor="w")
         self.status.pack(fill="x", padx=14, pady=8)
+        self.shape_menu = ttk.Combobox(header, textvariable=self.shape, values=["Square", "Rectangle", "Compact"], width=12, state="readonly")
+        self.shape_menu.pack(side="right", padx=8)
+        self.shape_menu.bind("<<ComboboxSelected>>", lambda e: self.refresh())
 
     def resize_grid(self, event):
         self.canvas.itemconfigure(self.window_id, width=event.width)
@@ -128,95 +132,144 @@ class Soundboard(tk.Tk):
         self.bank_menu["values"] = banks
         if self.bank.get() not in banks:
             self.bank.set("All")
-        count = max(2, self.canvas.winfo_width() // 180)
+        size = {"Square": (124, 124), "Rectangle": (168, 92), "Compact": (96, 96)}[self.shape.get()]
+        width, height = size
+        count = max(1, self.canvas.winfo_width() // (width + 14))
         query = self.search.get().casefold()
-        visible = [x for x in self.items
-                   if (self.show_archived.get() or not x.get("archived"))
-                   and (self.bank.get() == "All" or x.get("bank", "General") == self.bank.get())
-                   and query in x.get("label", "").casefold()]
+        visible = [x for x in self.items if
+                   (self.show_archived.get() or not x.get("archived")) and
+                   (self.bank.get() == "All" or x.get("bank", "General") == self.bank.get()) and
+                   query in x.get("label", "").casefold()]
         for index, item in enumerate(visible):
-            tile = tk.Frame(self.grid_frame, bg="#303039", padx=5, pady=5)
-            tile.grid(row=index // count, column=index % count, padx=5, pady=5, sticky="nsew")
             playing = item["id"] in self.playing and self.playing[item["id"]].get_busy()
-            label = ("● " if self.selected_pad == item["id"] and self.edit_mode.get() else "") + item["label"][:30]
-            pad = tk.Button(tile, text=label, wraplength=135, height=3, width=17,
+            selected = self.selected_pad == item["id"] and self.edit_mode.get()
+            tile = tk.Label(self.grid_frame, text=item["label"][:45], width=1, height=1,
+                            font=("Segoe UI", 10, "bold"), wraplength=width-16,
+                            justify="center", anchor="center", cursor="fleur" if self.edit_mode.get() else "hand2",
                             bg="#d72e45" if playing else item.get("color", COLORS[0]),
-                            fg="white", activebackground="#ed5267",
-                            command=lambda x=item: self.arrange_click(x) if self.edit_mode.get() else self.play(x))
-            pad.pack(fill="x")
-            self.pad_buttons[item["id"]] = pad
-            if self.edit_mode.get():
-                pad.configure(cursor="fleur", relief="raised")
-                pad.bind("<ButtonPress-1>", lambda e, x=item: self.start_drag(e, x))
-                pad.bind("<B1-Motion>", self.drag_motion)
-                pad.bind("<ButtonRelease-1>", self.finish_drag, add="+")
-            tk.Button(tile, text="⚙ Edit" if not self.edit_mode.get() else "⚙ Color / Group",
-                      command=lambda x=item: self.edit(x)).pack(fill="x", pady=(5, 0))
-        for col in range(count):
-            self.grid_frame.grid_columnconfigure(col, weight=1)
+                            fg="white", relief="solid" if selected else "flat", bd=3 if selected else 1)
+            tile.grid(row=index // count, column=index % count, padx=6, pady=6)
+            tile.grid_propagate(False)
+            tile.configure(width=width, height=height)
+            # Grid's pixel sizing comes from a fixed-size outer frame, not label character units.
+            tile.grid_forget()
+            holder = tk.Frame(self.grid_frame, width=width, height=height, bg="#202127")
+            holder.grid(row=index // count, column=index % count, padx=6, pady=6)
+            holder.grid_propagate(False)
+            tile.place(in_=holder, x=0, y=0, relwidth=1, relheight=1)
+            self.pad_buttons[item["id"]] = tile
+            tile.bind("<ButtonPress-1>", lambda e, x=item: self.pad_press(e, x))
+            tile.bind("<B1-Motion>", self.pad_motion)
+            tile.bind("<ButtonRelease-1>", lambda e, x=item: self.pad_release(e, x))
+            tile.bind("<Button-3>", lambda e, x=item: self.pad_menu(e, x))
+        self.grid_frame.update_idletasks()
 
-    def arrange_click(self, item):
-        if not self.edit_mode.get():
-            return
-        if self.selected_pad is None:
-            self.selected_pad = item["id"]
-            self.status.configure(text="Selected " + item["label"] + " — click destination")
-            self.refresh()
-            return
-        source_id = self.selected_pad
-        self.selected_pad = None
-        self.move_pad(source_id, item["id"])
-
-    def move_pad(self, source_id, target_id):
-        if source_id != target_id:
-            source = next((x for x in self.items if x["id"] == source_id), None)
-            target = next((x for x in self.items if x["id"] == target_id), None)
-            if source and target:
-                self.items.remove(source)
-                self.items.insert(self.items.index(target), source)
-                self.save()
-                self.status.configure(text="Pad order saved")
-        self.refresh()
-
-    def start_drag(self, event, item):
-        if not self.edit_mode.get():
-            return
+    def pad_press(self, event, item):
         self.dragging = item["id"]
         self.drag_start = (event.x_root, event.y_root)
-        self.status.configure(text="Arrange: drag onto another pad, then release to move it")
 
-    def drag_motion(self, event):
-        if not self.dragging:
+    def pad_motion(self, event):
+        if not self.edit_mode.get() or not self.dragging:
             return
-        x, y = event.x_root, event.y_root
-        for key, button in self.pad_buttons.items():
-            button.configure(relief="sunken" if key != self.dragging and
-                             button.winfo_rootx() <= x < button.winfo_rootx() + button.winfo_width() and
-                             button.winfo_rooty() <= y < button.winfo_rooty() + button.winfo_height()
-                             else "raised")
+        x, y = self.winfo_pointerxy()
+        for key, pad in self.pad_buttons.items():
+            pad.configure(relief="solid" if key != self.dragging and
+                          pad.winfo_rootx() <= x < pad.winfo_rootx() + pad.winfo_width() and
+                          pad.winfo_rooty() <= y < pad.winfo_rooty() + pad.winfo_height() else "flat")
 
-    def finish_drag(self, event):
-        if not self.dragging:
-            return
+    def pad_release(self, event, item):
         source_id = self.dragging
         self.dragging = None
         if not self.edit_mode.get():
+            self.play(item)
             return
         x, y = self.winfo_pointerxy()
-        moved = self.drag_start and (
+        moved = self.drag_start is not None and (
             abs(x - self.drag_start[0]) + abs(y - self.drag_start[1]) >= 8)
         self.drag_start = None
-        if not moved:
-            return
-        target_id = next((key for key, button in self.pad_buttons.items()
-                          if button.winfo_rootx() <= x < button.winfo_rootx() + button.winfo_width()
-                          and button.winfo_rooty() <= y < button.winfo_rooty() + button.winfo_height()), None)
-        if target_id and target_id != source_id:
+        if moved:
+            target_id = next((key for key, pad in self.pad_buttons.items()
+                              if pad.winfo_rootx() <= x < pad.winfo_rootx() + pad.winfo_width()
+                              and pad.winfo_rooty() <= y < pad.winfo_rooty() + pad.winfo_height()), None)
+            if target_id and target_id != source_id:
+                self.selected_pad = None
+                self.move_pad(source_id, target_id)
+            else:
+                self.refresh()
+        elif self.selected_pad and self.selected_pad != item["id"]:
+            selected = self.selected_pad
             self.selected_pad = None
-            self.move_pad(source_id, target_id)
+            self.move_pad(selected, item["id"])
         else:
-            self.status.configure(text="Drop on a pad, or click source then destination")
+            self.selected_pad = None if self.selected_pad == item["id"] else item["id"]
+            self.status.configure(text="Select destination pad to move" if self.selected_pad else "Selection cleared")
             self.refresh()
+
+    def move_pad(self, source_id, target_id):
+        source = next((x for x in self.items if x["id"] == source_id), None)
+        target = next((x for x in self.items if x["id"] == target_id), None)
+        if source and target and source != target:
+            self.items.remove(source)
+            self.items.insert(self.items.index(target), source)
+            self.save()
+            self.status.configure(text="Pad arrangement saved")
+        self.refresh()
+
+    def pad_menu(self, event, item):
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Change color...", command=lambda: self.change_color(item))
+        menu.add_command(label="Rename...", command=lambda: self.rename_pad(item))
+        menu.add_command(label="Change group...", command=lambda: self.change_group(item))
+        menu.add_separator()
+        menu.add_command(label="Move to first", command=lambda: self.move_to_edge(item, True))
+        menu.add_command(label="Move to last", command=lambda: self.move_to_edge(item, False))
+        menu.add_command(label="Move left", command=lambda: self.move_by(item, -1))
+        menu.add_command(label="Move right", command=lambda: self.move_by(item, 1))
+        menu.add_separator()
+        menu.add_command(label="Relink audio...", command=lambda: self.relink(item))
+        menu.add_command(label="Unarchive" if item.get("archived") else "Archive",
+                         command=lambda: self.toggle_archive(item))
+        menu.tk_popup(event.x_root, event.y_root)
+        menu.grab_release()
+
+    def change_color(self, item):
+        color = colorchooser.askcolor(color=item.get("color", COLORS[0]), parent=self)[1]
+        if color:
+            item["color"] = color
+            self.save()
+            self.refresh()
+
+    def rename_pad(self, item):
+        label = simpledialog.askstring("Rename pad", "Label:", initialvalue=item["label"], parent=self)
+        if label and label.strip():
+            item["label"] = label.strip()
+            self.save()
+            self.refresh()
+
+    def change_group(self, item):
+        bank = simpledialog.askstring("Sound group", "Group:", initialvalue=item.get("bank", "General"), parent=self)
+        if bank and bank.strip():
+            item["bank"] = bank.strip()
+            self.save()
+            self.refresh()
+
+    def toggle_archive(self, item):
+        item["archived"] = not item.get("archived", False)
+        self.save()
+        self.refresh()
+
+    def move_by(self, item, offset):
+        i = self.items.index(item)
+        j = max(0, min(len(self.items)-1, i+offset))
+        self.items.insert(j, self.items.pop(i))
+        self.save()
+        self.refresh()
+
+    def move_to_edge(self, item, first):
+        self.items.remove(item)
+        self.items.insert(0 if first else len(self.items), item)
+        self.save()
+        self.refresh()
 
     def play(self, item):
         path = Path(item["path"])
@@ -235,28 +288,6 @@ class Soundboard(tk.Tk):
             self.refresh()
         except (pygame.error, OSError, RuntimeError) as exc:
             messagebox.showerror("Playback failed", str(exc))
-
-    def edit(self, item):
-        choice = simpledialog.askstring("Pad label", "Sound label:",
-                                        initialvalue=item["label"], parent=self)
-        if choice is not None and choice.strip():
-            item["label"] = choice.strip()
-        selected = colorchooser.askcolor(color=item.get("color", COLORS[0]), parent=self,
-                                         title="Choose pad color")[1]
-        if selected:
-            item["color"] = selected
-        group = simpledialog.askstring("Sound group", "Group / bank name:",
-                                       initialvalue=item.get("bank", "General"), parent=self)
-        if group is not None and group.strip():
-            item["bank"] = group.strip()
-        action = messagebox.askyesnocancel("Sound management",
-                                          "Archive/unarchive this pad?\\nYes: toggle archive\\nNo: locate replacement audio\\nCancel: finish")
-        if action is True:
-            item["archived"] = not item.get("archived", False)
-        elif action is False:
-            self.relink(item)
-        self.save()
-        self.refresh()
 
     def relink(self, item):
         path = filedialog.askopenfilename(filetypes=[("Audio files", "*.wav *.mp3 *.ogg")])
