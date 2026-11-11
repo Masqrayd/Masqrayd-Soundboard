@@ -143,20 +143,15 @@ class Soundboard(tk.Tk):
         for index, item in enumerate(visible):
             playing = item["id"] in self.playing and self.playing[item["id"]].get_busy()
             selected = self.selected_pad == item["id"] and self.edit_mode.get()
-            tile = tk.Label(self.grid_frame, text=item["label"][:45], width=1, height=1,
+            holder = tk.Frame(self.grid_frame, width=width, height=height, bg="#202127")
+            holder.grid(row=index // count, column=index % count, padx=6, pady=6)
+            holder.grid_propagate(False)
+            tile = tk.Label(holder, text=item["label"][:45], width=1, height=1,
                             font=("Segoe UI", 10, "bold"), wraplength=width-16,
                             justify="center", anchor="center", cursor="fleur" if self.edit_mode.get() else "hand2",
                             bg="#d72e45" if playing else item.get("color", COLORS[0]),
                             fg="white", relief="solid" if selected else "flat", bd=3 if selected else 1)
-            tile.grid(row=index // count, column=index % count, padx=6, pady=6)
-            tile.grid_propagate(False)
-            tile.configure(width=width, height=height)
-            # Grid's pixel sizing comes from a fixed-size outer frame, not label character units.
-            tile.grid_forget()
-            holder = tk.Frame(self.grid_frame, width=width, height=height, bg="#202127")
-            holder.grid(row=index // count, column=index % count, padx=6, pady=6)
-            holder.grid_propagate(False)
-            tile.place(in_=holder, x=0, y=0, relwidth=1, relheight=1)
+            tile.place(x=0, y=0, relwidth=1, relheight=1)
             self.pad_buttons[item["id"]] = tile
             tile.bind("<ButtonPress-1>", lambda e, x=item: self.pad_press(e, x))
             tile.bind("<B1-Motion>", self.pad_motion)
