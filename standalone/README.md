@@ -24,3 +24,9 @@ Import WAV, MP3, or OGG sounds. The library is saved in `%USERPROFILE%\\Music\\M
 Standalone EXE/installer, Broadcast Stack launch button, dedicated output-device selection, independent monitoring bus, per-sound volume, loop controls, drag reorder, and automated Windows runtime verification.
 
 This branch deliberately avoids modifying OBS plugin files or the Broadcast Stack/teleprompter.
+
+## Portable Windows launch and desktop shortcut
+
+Extract the GitHub Actions ZIP once to a permanent folder such as `%LOCALAPPDATA%\\Programs\\Masqrayd Soundboard`. Run `Masqrayd-Soundboard.exe` from that folder; do **not** run the EXE from the ZIP or delete the accompanying files. To create a desktop shortcut, right-click `Create-Desktop-Shortcut.ps1` and choose **Run with PowerShell** only after verifying the file and scanning the package. The shortcut targets the extracted EXE, not a temporary installer. Launch the app and use the Windows taskbar's **Pin to taskbar** option. Do not bypass antivirus warnings. Sound data remains under your Music folder.
+
+The current GUI provides right-click Move Left/Right/First/Last as a tested user-reported workaround; drag-and-drop is not yet confirmed to work on Windows. OBS integration is not required; capture the computer's output with your existing OBS audio setup and avoid duplicate captures.
