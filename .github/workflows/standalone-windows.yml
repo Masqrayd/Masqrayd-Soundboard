@@ -30,6 +30,9 @@ jobs:
         run: |
           if (!(Test-Path dist/Masqrayd-Soundboard/Masqrayd-Soundboard.exe)) { throw "Executable not found" }
           Get-FileHash dist/Masqrayd-Soundboard/Masqrayd-Soundboard.exe -Algorithm SHA256
+      - name: Include desktop shortcut helper
+        shell: pwsh
+        run: Copy-Item standalone/Create-Desktop-Shortcut.ps1 dist/Masqrayd-Soundboard/Create-Desktop-Shortcut.ps1
       - name: Package downloadable ZIP
         shell: pwsh
         run: Compress-Archive -Path dist/Masqrayd-Soundboard -DestinationPath Masqrayd-Soundboard-Standalone-Windows-x64-ONEDIR.zip -Force
